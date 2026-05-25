@@ -49,7 +49,7 @@ import {
 # Key Vault Secrets User on the legacy shared JWT-signing secret that
 # config.js reads.
 resource "azurerm_role_assignment" "llm_explorer_kv_jwt_secret" {
-  scope                = "${data.azurerm_key_vault.main.id}/secrets/api-jwt-signing-secret"
+  scope                = "${data.azurerm_key_vault.shared.id}/secrets/api-jwt-signing-secret"
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azurerm_user_assigned_identity.llm_explorer.principal_id
 }
@@ -57,6 +57,12 @@ resource "azurerm_role_assignment" "llm_explorer_kv_jwt_secret" {
 import {
   to = azurerm_role_assignment.llm_explorer_kv_jwt_secret
   id = "/subscriptions/aee0cbd2-8074-4001-b610-0f8edb4eaa3c/resourceGroups/infra/providers/Microsoft.KeyVault/vaults/romaine-kv/secrets/api-jwt-signing-secret/providers/Microsoft.Authorization/roleAssignments/8b12305b-6a6f-4263-5432-1f14c3e874da"
+}
+
+resource "azurerm_role_assignment" "llm_explorer_app_keyvault" {
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_user_assigned_identity.llm_explorer.principal_id
 }
 
 # App Configuration Data Reader at store level — config.js reads
