@@ -11,9 +11,9 @@ variable "resource_group_name" {
 }
 
 variable "key_vault_name" {
-  description = "Shared key vault that holds api-jwt-signing-secret."
+  description = "LLM Explorer-owned Key Vault for app runtime secrets."
   type        = string
-  default     = "romaine-kv"
+  default     = "ng6-llm-explorer"
 }
 
 variable "cosmos_account_name" {
