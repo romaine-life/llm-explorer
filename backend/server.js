@@ -45,7 +45,7 @@ async function start() {
   // docs; multi-type by `type` field). Documents are type='llm-session'.
   const container = cosmosClient.database('HomepageDB').container('userdata');
 
-  const requireAuth = createRequireAuth({ jwtSecret: config.jwtSigningSecret });
+  const requireAuth = createRequireAuth();
 
   // Mount at /llm so URLs match chat.ps1's $API_BASE/llm/api/sessions shape.
   app.use('/llm', createLLMRoutes({ requireAuth, container }));

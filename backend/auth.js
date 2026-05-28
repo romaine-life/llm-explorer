@@ -1,9 +1,18 @@
-import jwt from 'jsonwebtoken';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-// llm-explorer only verifies JWTs — callers (chat.ps1, others) sign their
-// own JWTs using the shared api-jwt-signing-secret. No token issuance.
-export function createRequireAuth({ jwtSecret }) {
-  return (req, res, next) => {
+const AUTH_ISSUER = process.env.AUTH_ISSUER || 'https://auth.romaine.life';
+const AUTH_JWKS_URL = process.env.AUTH_JWKS_URL || `${AUTH_ISSUER}/api/auth/jwks`;
+const AUTH_ROLES = new Set(['admin', 'user', 'service']);
+
+// llm-explorer only verifies JWTs — it never issues them. All callers
+// (chat.ps1, the web frontend) present auth.romaine.life RS256 tokens,
+// verified against the issuer's JWKS. The legacy HS256
+// api-jwt-signing-secret path was removed in the auth.romaine.life
+// migration — no compatibility fallback.
+export function createRequireAuth() {
+  const authJwks = createRemoteJWKSet(new URL(AUTH_JWKS_URL));
+
+  return async (req, res, next) => {
     let token;
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
@@ -19,14 +28,21 @@ export function createRequireAuth({ jwtSecret }) {
     }
 
     try {
-      const payload = jwt.verify(token, jwtSecret);
+      const { payload } = await jwtVerify(token, authJwks, {
+        issuer: AUTH_ISSUER,
+      });
+      const role = typeof payload.role === 'string' ? payload.role : 'user';
+      if (!AUTH_ROLES.has(role)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
       req.user = {
         sub: payload.sub,
         email: payload.email,
         name: payload.name,
-        role: payload.role || 'member',
+        role,
+        apps: payload.apps || {},
       };
-      next();
+      return next();
     } catch {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }

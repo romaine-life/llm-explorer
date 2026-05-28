@@ -3,70 +3,30 @@ param(
 )
 
 $API_BASE = "https://llm-explorer.romaine.life/llm"
-$PROFILE_DIR = "D:\profiles\shell-config-profile-1"
 
-# --- JWT minting (same secret as fzt-terminal) ---
+# --- auth.romaine.life token ---
+# Reuses the token the 'at' tool stores (single sign-in across romaine.life
+# CLI tools). Refresh it with the authromaine flow when it expires. The
+# legacy HS256 mint-from-keyring path was removed in the auth.romaine.life
+# migration.
 
-function Get-JWTSecret {
-    Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-public class CredRead {
-    [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
-    static extern bool CredReadW(string target, int type, int flags, out IntPtr cred);
-    [DllImport("advapi32.dll")]
-    static extern void CredFree(IntPtr buffer);
-    [StructLayout(LayoutKind.Sequential)]
-    struct CREDENTIAL {
-        public int Flags; public int Type; public IntPtr TargetName; public IntPtr Comment;
-        public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob;
-        public int Persist; public int AttributeCount; public IntPtr Attributes;
-        public IntPtr TargetAlias; public IntPtr UserName;
+function Get-AuthToken {
+    $tokenFile = Join-Path $env:USERPROFILE '.fzt-automate\auth-token.json'
+    if (-not (Test-Path $tokenFile)) {
+        Write-Host "Not signed in — run the authromaine flow to get an auth.romaine.life token" -ForegroundColor Red
+        return $null
     }
-    public static string Read(string target) {
-        IntPtr ptr;
-        if (!CredReadW(target, 1, 0, out ptr)) return null;
-        var cred = Marshal.PtrToStructure<CREDENTIAL>(ptr);
-        var bytes = new byte[cred.CredentialBlobSize];
-        Marshal.Copy(cred.CredentialBlob, bytes, 0, bytes.Length);
-        CredFree(ptr);
-        return Encoding.UTF8.GetString(bytes);
+    try {
+        $raw = (Get-Content -Raw $tokenFile).TrimStart([char]0xFEFF)
+        return ($raw | ConvertFrom-Json).token
+    } catch {
+        Write-Host "auth token file is unreadable — refresh it via the authromaine flow" -ForegroundColor Red
+        return $null
     }
-}
-'@ -ErrorAction SilentlyContinue
-    return [CredRead]::Read("homepage:jwt-secret")
-}
-
-function B64URL($bytes) {
-    [Convert]::ToBase64String($bytes).Replace('+','-').Replace('/','_').TrimEnd('=')
-}
-
-function Mint-JWT {
-    $secret = Get-JWTSecret
-    if (-not $secret) { Write-Host "JWT secret not found in credential store" -ForegroundColor Red; return $null }
-
-    $identity = Get-Content "$PROFILE_DIR\at-menu\.identity" -Raw -ErrorAction SilentlyContinue
-    if (-not $identity) { $identity = "nelson" }
-    $identity = $identity.Trim()
-
-    $identities = Get-Content "$PROFILE_DIR\at-menu\identities.json" -Raw | ConvertFrom-Json
-    $id = $identities.$identity
-
-    $header = B64URL([Text.Encoding]::UTF8.GetBytes('{"alg":"HS256","typ":"JWT"}'))
-    $now = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    $exp = $now + 300
-    $payloadJson = "{`"sub`":`"$($id.sub)`",`"email`":`"$($id.email)`",`"name`":`"$($id.name)`",`"role`":`"$($id.role)`",`"iat`":$now,`"exp`":$exp}"
-    $payload = B64URL([Text.Encoding]::UTF8.GetBytes($payloadJson))
-    $msg = "$header.$payload"
-    $hmac = New-Object System.Security.Cryptography.HMACSHA256
-    $hmac.Key = [Text.Encoding]::UTF8.GetBytes($secret)
-    $sig = B64URL($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($msg)))
-    return "$msg.$sig"
 }
 
 function API-Call($method, $path, $body) {
-    $token = Mint-JWT
+    $token = Get-AuthToken
     if (-not $token) { return $null }
     $headers = @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' }
     $uri = "$API_BASE$path"
