@@ -4,7 +4,7 @@
 # Per-app workload identity for the llm-explorer pod, plus the data-plane
 # grants the pod actually needs.
 #
-# Migrated from nelsong6/infra-bootstrap/tofu/llm-explorer-identity.tf as
+# Migrated from romaine-life/infra-bootstrap/tofu/llm-explorer-identity.tf as
 # part of retiring the "app-specific resources in shared bootstrap" anti-
 # pattern. infra-bootstrap creates the per-app SP + grants it Owner on
 # the cluster sub; the app's own tofu owns everything else.
